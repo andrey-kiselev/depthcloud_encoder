@@ -56,7 +56,7 @@ namespace depthcloud
 using namespace message_filters::sync_policies;
 namespace enc = sensor_msgs::image_encodings;
 
-static int target_resolution_ = 512;
+static int target_resolution_ = 256;//512;
 
 DepthCloudEncoder::DepthCloudEncoder(ros::NodeHandle& nh, ros::NodeHandle& pnh) :
     nh_(nh),
@@ -90,7 +90,7 @@ DepthCloudEncoder::DepthCloudEncoder(ros::NodeHandle& nh, ros::NodeHandle& pnh) 
   priv_nh_.param<std::string>("depth", depthmap_topic_, "/camera/depth/image");
 
   // read rgb topic from param server
-  priv_nh_.param<std::string>("rgb", rgb_image_topic_, "/camera/rgb/image_color");
+  priv_nh_.param<std::string>("rgb", rgb_image_topic_, "/camera/rgb/image_rect_color");
 
   // Monitor whether anyone is subscribed to the output
   image_transport::SubscriberStatusCallback connect_cb = boost::bind(&DepthCloudEncoder::connectCb, this);
@@ -331,16 +331,36 @@ void DepthCloudEncoder::process(const sensor_msgs::ImageConstPtr& depth_msg,
                                 const sensor_msgs::ImageConstPtr& color_msg,
                                 const std::size_t crop_size)
 {
+
+	cv_bridge::CvImagePtr color_ptr;
+	cv_bridge::CvImagePtr depth_ptr;
+	
+	try {
+		color_ptr = cv_bridge::toCvCopy(color_msg, "bgr8");
+		depth_ptr = cv_bridge::toCvCopy(depth_msg, "32FC1");
+		//cv::circle(color_ptr->image, cv::Point(50, 50), 10, CV_RGB(255,0,0));
+		cv::resize(color_ptr->image, color_ptr->image, cv::Size(), 0.5, 0.5);
+		cv::resize(depth_ptr->image, depth_ptr->image, cv::Size(), 0.5, 0.5);
+		//color1_msg = color_ptr->toImageMsg();
+		//depth1_msg = depth_ptr->toImageMsg();
+	} catch (cv_bridge::Exception& e) {
+		ROS_ERROR_STREAM("OpenCV-ROS bridge error: " << e.what());
+		//return;
+	}
+	
+	sensor_msgs::ImageConstPtr depth1_msg = (depth_ptr->toImageMsg());
+	sensor_msgs::ImageConstPtr color1_msg = (color_ptr->toImageMsg());
+
   // Bit depth of image encoding
-  int depth_bits = enc::bitDepth(depth_msg->encoding);
-  int depth_channels = enc::numChannels(depth_msg->encoding);
+  int depth_bits = enc::bitDepth(depth1_msg->encoding);
+  int depth_channels = enc::numChannels(depth1_msg->encoding);
 
   int color_bits = 0;
   int color_channels = 0;
 
   if ((depth_bits != 32) || (depth_channels != 1))
   {
-    ROS_DEBUG_STREAM( "Invalid color depth image format ("<<depth_msg->encoding <<")");
+    ROS_DEBUG_STREAM( "Invalid color depth image format ("<<depth1_msg->encoding <<")");
     return;
   }
 
@@ -348,11 +368,11 @@ void DepthCloudEncoder::process(const sensor_msgs::ImageConstPtr& depth_msg,
   cv_bridge::CvImagePtr color_cv_ptr;
 
   // check for color message
-  if (color_msg)
+  if (color1_msg)
   {
     try
     {
-      color_cv_ptr = cv_bridge::toCvCopy(color_msg, "bgr8");
+      color_cv_ptr = cv_bridge::toCvCopy(color1_msg, "bgr8");
 
     }
     catch (cv_bridge::Exception& e)
@@ -361,10 +381,10 @@ void DepthCloudEncoder::process(const sensor_msgs::ImageConstPtr& depth_msg,
       return;
     }
 
-    if (depth_msg->width != color_msg->width || depth_msg->height != color_msg->height)
+    if (depth1_msg->width != color1_msg->width || depth1_msg->height != color1_msg->height)
     {
-      ROS_DEBUG_STREAM( "Depth image resolution (" << (int)depth_msg->width << "x" << (int)depth_msg->height << ") "
-      "does not match color image resolution (" << (int)color_msg->width << "x" << (int)color_msg->height << ")");
+      ROS_DEBUG_STREAM( "Depth image resolution (" << (int)depth1_msg->width << "x" << (int)depth1_msg->height << ") "
+      "does not match color image resolution (" << (int)color1_msg->width << "x" << (int)color1_msg->height << ")");
       return;
     }
   }
@@ -373,7 +393,7 @@ void DepthCloudEncoder::process(const sensor_msgs::ImageConstPtr& depth_msg,
   sensor_msgs::ImagePtr depth_int_msg(new sensor_msgs::Image());
   sensor_msgs::ImagePtr valid_mask_msg(new sensor_msgs::Image());
 
-  depthInterpolation(depth_msg, depth_int_msg, valid_mask_msg);
+  depthInterpolation(depth1_msg, depth_int_msg, valid_mask_msg);
 
   unsigned int pix_size = enc::bitDepth(enc::BGR8) / 8 * 3;
 
@@ -436,7 +456,7 @@ void DepthCloudEncoder::process(const sensor_msgs::ImageConstPtr& depth_msg,
     // pointer to color data
     const uint8_t* source_color_ptr = 0;
     std::size_t source_color_y_step = 0;
-    if (color_msg)
+    if (color1_msg)
     {
       source_color_y_step = input_width * pix_size;
       source_color_ptr = static_cast<const uint8_t*>(&color_cv_ptr->image.data[(top_y * input_width + left_x) * pix_size]);
