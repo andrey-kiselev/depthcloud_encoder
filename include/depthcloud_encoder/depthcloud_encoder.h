@@ -58,72 +58,80 @@
 
 #include "ros/ros.h"
 
-namespace depthcloud
-{
+namespace depthcloud {
 
-class DepthCloudEncoder
-{
-public:
-  DepthCloudEncoder(ros::NodeHandle& nh, ros::NodeHandle& pnh);
-  virtual ~DepthCloudEncoder();
+	class DepthCloudEncoder {
+	public:
 
-protected:
+		DepthCloudEncoder(	ros::NodeHandle& nh, 
+							ros::NodeHandle& pnh);
+							
+		virtual ~DepthCloudEncoder();
 
-  void connectCb();
+	protected:
 
-  void subscribe(std::string& depth_topic, std::string& color_topic);
-  void subscribeCloud(std::string& cloud_topic);
-  void unsubscribe();
+		void connectCb();
 
-  void cloudCB(const sensor_msgs::PointCloud2& cloud_msg);
+		void subscribe(std::string& depth_topic, std::string& color_topic);
+		void subscribeCloud(std::string& cloud_topic);
+		void unsubscribe();
 
-  void depthCB(const sensor_msgs::ImageConstPtr& depth_msg);
+		void cloudCB(const sensor_msgs::PointCloud2& cloud_msg);
+		void depthCB(const sensor_msgs::ImageConstPtr& depth_msg);
+		void depthColorCB(	const sensor_msgs::ImageConstPtr& depth_msg, 
+							const sensor_msgs::ImageConstPtr& color_msg);
 
-  void depthColorCB(const sensor_msgs::ImageConstPtr& depth_msg, const sensor_msgs::ImageConstPtr& color_msg);
+		void depthInterpolation(	sensor_msgs::ImageConstPtr depth_msg,
+									sensor_msgs::ImagePtr depth_int_msg,
+									sensor_msgs::ImagePtr mask_msg);
 
-  void depthInterpolation(sensor_msgs::ImageConstPtr depth_msg,
-                          sensor_msgs::ImagePtr depth_int_msg,
-                          sensor_msgs::ImagePtr mask_msg);
+		void cloudToDepth(	const sensor_msgs::PointCloud2& cloud_msg, 
+							sensor_msgs::ImagePtr depth_msg, 
+							sensor_msgs::ImagePtr color_msg);
 
-  void cloudToDepth(const sensor_msgs::PointCloud2& cloud_msg, sensor_msgs::ImagePtr depth_msg, sensor_msgs::ImagePtr color_msg);
-  void process(const sensor_msgs::ImageConstPtr& depth_msg, const sensor_msgs::ImageConstPtr& color_msg, const std::size_t crop_size);
+		void process(	const sensor_msgs::ImageConstPtr& depth_msg, 
+						const sensor_msgs::ImageConstPtr& color_msg, 
+						/*const std::size_t crop_size,*/
+						const float scale_);
 
 
-  typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> SyncPolicyDepthColor;
-  typedef message_filters::Synchronizer<SyncPolicyDepthColor> SynchronizerDepthColor;
+		typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::Image> SyncPolicyDepthColor;
+		typedef message_filters::Synchronizer<SyncPolicyDepthColor> SynchronizerDepthColor;
 
-  ros::NodeHandle& nh_;
-  ros::NodeHandle& pnh_;
+		ros::NodeHandle& nh_;
+		ros::NodeHandle& pnh_;
 
-  // ROS stuff
-  boost::shared_ptr<image_transport::SubscriberFilter > depth_sub_;
-  boost::shared_ptr<image_transport::SubscriberFilter > color_sub_;
-  ros::Subscriber cloud_sub_;
+		// ROS stuff
+		boost::shared_ptr<image_transport::SubscriberFilter > depth_sub_;
+		boost::shared_ptr<image_transport::SubscriberFilter > color_sub_;
+		ros::Subscriber cloud_sub_;
 
-  boost::shared_ptr<SynchronizerDepthColor> sync_depth_color_;
+		boost::shared_ptr<SynchronizerDepthColor> sync_depth_color_;
 
-  boost::mutex connect_mutex_;
+		boost::mutex connect_mutex_;
 
-  image_transport::ImageTransport pub_it_;
-  image_transport::Publisher pub_;
+		image_transport::ImageTransport pub_it_;
+		image_transport::Publisher pub_;
 
-  std::size_t crop_size_;
+		//[[deprecated]]
+		/*std::size_t crop_size_;*/
+		
+		float scale_;
 
-  std::string depthmap_topic_;
-  std::string rgb_image_topic_;
-  std::string cloud_topic_;
-  std::string camera_frame_id_;
-  std::string depth_source_;
+		std::string depthmap_topic_;
+		std::string rgb_image_topic_;
+		std::string cloud_topic_;
+		std::string camera_frame_id_;
+		std::string depth_source_;
 
-  tf::TransformListener tf_listener_;
+		tf::TransformListener tf_listener_;
 
-  double f_;
-  float max_depth_per_tile_;
+		double fx_;
+		double fy_;
+		
+		float max_depth_per_tile_;
 
-  bool connectivityExceptionFlag, lookupExceptionFlag;
-};
-
+		bool connectivityExceptionFlag, lookupExceptionFlag;
+	};
 }
-
 #endif
-
