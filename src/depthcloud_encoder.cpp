@@ -315,22 +315,21 @@ namespace depthcloud {
 		// Inefficient drop-in implementation
 		sensor_msgs::ImageConstPtr depth_msg = src_depth_msg;
 		sensor_msgs::ImageConstPtr color_msg = src_color_msg;
-		
-		{
+		{ 
 			cv_bridge::CvImagePtr color_ptr;
 			cv_bridge::CvImagePtr depth_ptr;			
 			try {
 				color_ptr = cv_bridge::toCvCopy(src_color_msg, "bgr8");
 				depth_ptr = cv_bridge::toCvCopy(src_depth_msg, "32FC1");
-				cv::resize(color_ptr->image, color_ptr->image, cv::Size(), scale_, scale_, cv::INTER_AREA);
-				cv::resize(depth_ptr->image, depth_ptr->image, cv::Size(), scale_, scale_, cv::INTER_AREA);
+				cv::resize(color_ptr->image, color_ptr->image, cv::Size(), scale_, scale_);
+				cv::resize(depth_ptr->image, depth_ptr->image, cv::Size(), scale_, scale_);
 				depth_msg = (depth_ptr->toImageMsg());
 				color_msg = (color_ptr->toImageMsg());
 			} catch (cv_bridge::Exception& e) {
 				ROS_ERROR_STREAM("OpenCV-ROS bridge error: " << e.what());
 			}
 		}
-		
+
 		// Bit depth of image encoding
 		int depth_bits = enc::bitDepth(depth_msg->encoding);
 		int depth_channels = enc::numChannels(depth_msg->encoding);
@@ -387,10 +386,12 @@ namespace depthcloud {
 
 		// copy depth & color data to output image
 		{
-			std::size_t y, x, left_x, top_y, width_x, width_y;
+			std::size_t y, x, left_x = 0, top_y = 0, width_x = input_width, width_y = input_height;
 
-			// calculate borders to crop input image to crop_size X crop_size
+			int top_bottom_corner = 0, left_right_corner = 0;
+
 			/*
+			// calculate borders to crop input image to crop_size X crop_size			
 			int top_bottom_corner = (static_cast<int>(input_height) - static_cast<int>(depth_msg->height)) / 2;
 			int left_right_corner = (static_cast<int>(input_width) - static_cast<int>(depth_msg->width)) / 2;
 
@@ -410,8 +411,6 @@ namespace depthcloud {
 				width_x = input_width - left_right_corner;
 			}
 			*/
-			int top_bottom_corner = (static_cast<int>(input_height)) / 2;
-			int left_right_corner = (static_cast<int>(input_width)) / 2;
 			
 			// pointer to output image
 			uint8_t* dest_ptr = &output_msg->data[((top_y - top_bottom_corner) * output_msg->width + left_x - left_right_corner) * pix_size];
