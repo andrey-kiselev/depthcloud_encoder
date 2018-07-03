@@ -37,7 +37,7 @@
 #include "depthcloud_encoder/depthcloud_encoder.h"
 
 int main(int argc, char **argv){
-  ros::init(argc, argv, "head_controller_node");
+  ros::init(argc, argv, "depthcloud_encoder_node");
   ros::NodeHandle nh;
   ros::NodeHandle pnh("~");
 

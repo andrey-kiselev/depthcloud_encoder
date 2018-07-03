@@ -76,11 +76,15 @@ namespace depthcloud {
 		priv_nh_.param<std::string>("depth_source", depth_source_, "cloud");
 
 		// read point cloud topic from param server
-		priv_nh_.param<std::string>("cloud", cloud_topic_, "/camera/depth_registered/points");
+		priv_nh_.param<std::string>("cloud", cloud_topic_, "/camera/depth/points");
 
 		// The original frame id of the camera that captured this cloud
 		// For /camera/depth_registered/points it is /camera_rgb_optical_frame
 		priv_nh_.param<std::string>("camera_frame_id", camera_frame_id_, "/camera_rgb_optical_frame");
+		
+		priv_nh_.param<std::string>("camera_info_topic", cam_info_topic_, "/camera/rgb/camera_info");
+		sensor_msgs::CameraInfoConstPtr msg = ros::topic::waitForMessage<sensor_msgs::CameraInfo>(cam_info_topic_, priv_nh_);//, 10.0);
+
 
 		// read focal length value from param server in case a cloud topic is used.
 		priv_nh_.param<double>("fx", fx_, 542.193326);
