@@ -76,7 +76,7 @@ namespace depthcloud {
 		priv_nh_.param<std::string>("depth_source", depth_source_, "cloud");
 
 		// read point cloud topic from param server
-		priv_nh_.param<std::string>("cloud", cloud_topic_, "/camera/depth/points");
+		priv_nh_.param<std::string>("cloud", cloud_topic_, "/camera/depth_registered/points");
 
 		// The original frame id of the camera that captured this cloud
 		// For /camera/depth_registered/points it is /camera_rgb_optical_frame
