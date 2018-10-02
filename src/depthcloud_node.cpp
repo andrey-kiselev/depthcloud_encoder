@@ -37,16 +37,18 @@
 #include "depthcloud_encoder/depthcloud_encoder.h"
 
 int main(int argc, char **argv){
-  ros::init(argc, argv, "head_controller_node");
+  ros::init(argc, argv, "depthcloud_encoder_node");
   ros::NodeHandle nh;
   ros::NodeHandle pnh("~");
 
   depthcloud::DepthCloudEncoder depth_enc(nh, pnh);
 
-  ros::AsyncSpinner spinner(2);
+  // use 4 threads
+  ros::AsyncSpinner spinner(4);
 
   spinner.start();
   ros::waitForShutdown();
 
+  spinner.stop();
   return 0;
 }
