@@ -43,10 +43,12 @@ int main(int argc, char **argv){
 
   depthcloud::DepthCloudEncoder depth_enc(nh, pnh);
 
-  ros::AsyncSpinner spinner(2);
+  // use 4 threads
+  ros::AsyncSpinner spinner(4);
 
   spinner.start();
   ros::waitForShutdown();
 
+  spinner.stop();
   return 0;
 }

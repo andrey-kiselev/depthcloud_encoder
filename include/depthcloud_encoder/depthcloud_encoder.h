@@ -105,7 +105,7 @@ namespace depthcloud {
 		boost::shared_ptr<image_transport::SubscriberFilter > depth_sub_;
 		boost::shared_ptr<image_transport::SubscriberFilter > color_sub_;
 		ros::Subscriber cloud_sub_;
-
+		
 		boost::shared_ptr<SynchronizerDepthColor> sync_depth_color_;
 
 		boost::mutex connect_mutex_;
@@ -113,9 +113,6 @@ namespace depthcloud {
 		image_transport::ImageTransport pub_it_;
 		image_transport::Publisher pub_;
 
-		//[[deprecated]]
-		/*std::size_t crop_size_;*/
-		
 		float scale_;
 
 		std::string depthmap_topic_;
@@ -124,11 +121,14 @@ namespace depthcloud {
 		std::string camera_frame_id_;
 		std::string cam_info_topic_;
 		std::string depth_source_;
+		
+		bool rectified_;
 
 		tf::TransformListener tf_listener_;
 
-		double fx_;
-		double fy_;
+		// camera parameters
+		double wdth_, hght_;
+		double fx_, fy_, cx_, cy_;
 		
 		float max_depth_per_tile_;
 

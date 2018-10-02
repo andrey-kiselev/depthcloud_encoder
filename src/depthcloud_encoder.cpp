@@ -55,17 +55,12 @@ namespace depthcloud {
 	using namespace message_filters::sync_policies;
 	namespace enc = sensor_msgs::image_encodings;
 
-	//static int target_resolution_ = 512;
-	static float scale = 0.5f;
-
 	DepthCloudEncoder::DepthCloudEncoder(	ros::NodeHandle& nh, 
 											ros::NodeHandle& pnh):	nh_(nh),
 																	pnh_(pnh),
 																	depth_sub_(),
 																	color_sub_(),
 																	pub_it_(nh_),
-																	/*crop_size_(target_resolution_),*/
-																	scale_(scale),
 																	connectivityExceptionFlag(false),
 																	lookupExceptionFlag(false) {
 			
@@ -82,13 +77,22 @@ namespace depthcloud {
 		// For /camera/depth_registered/points it is /camera_rgb_optical_frame
 		priv_nh_.param<std::string>("camera_frame_id", camera_frame_id_, "/camera_rgb_optical_frame");
 		
+		// wait until get camera parameters, without timeout 
+		priv_nh_.param<bool>("rectified", rectified_, false);
 		priv_nh_.param<std::string>("camera_info_topic", cam_info_topic_, "/camera/rgb/camera_info");
 		sensor_msgs::CameraInfoConstPtr msg = ros::topic::waitForMessage<sensor_msgs::CameraInfo>(cam_info_topic_, priv_nh_);//, 10.0);
-
-
-		// read focal length value from param server in case a cloud topic is used.
-		priv_nh_.param<double>("fx", fx_, 542.193326);
-		priv_nh_.param<double>("fy", fy_, 541.656577);
+		wdth_ = msg->width;
+		hght_ = msg->height;
+		if (!rectified_){
+			fx_ = msg->K[0]; fy_ = msg->K[4]; cx_ = msg->K[2]; cy_ = msg->K[5];
+		} else {
+			fx_ = msg->P[0]; fy_ = msg->P[5]; cx_ = msg->P[2]; cy_ = msg->P[6];
+		}
+		
+		ROS_INFO("Camera parameters: w:%f, h:%f, f:%f/%f, c:%f/%f", wdth_, hght_, fx_, fy_, cx_, cy_);
+		
+		// scaling: needed to save bandwidth, but also reduce import time on client side
+		priv_nh_.param<float>("scaling", scale_, 0.5);
 
 		// read max depth per tile from param server
 		priv_nh_.param<float>("max_depth_per_tile", max_depth_per_tile_, 1.0);
@@ -188,6 +192,7 @@ namespace depthcloud {
 	void DepthCloudEncoder::cloudCB(const sensor_msgs::PointCloud2& cloud_msg) {
 		sensor_msgs::ImagePtr depth_msg( new sensor_msgs::Image() );
 		sensor_msgs::ImagePtr color_msg( new sensor_msgs::Image() );
+		
 		/* For depth:
 			height: 480
 			width: 640
@@ -202,18 +207,20 @@ namespace depthcloud {
 			is_bigendian: 0
 			step: 1920
 		*/
-		color_msg->height = depth_msg->height = 480;
-		color_msg->width  = depth_msg->width  = 640;
+		
+		color_msg->height = depth_msg->height = hght_;
+		color_msg->width  = depth_msg->width  = wdth_;
 		depth_msg->encoding = "32FC1";
 		color_msg->encoding = "rgb8";
 		color_msg->is_bigendian = depth_msg->is_bigendian = 0;
+		
 		depth_msg->step = depth_msg->width * 4;
 		color_msg->step = color_msg->width * 3;
 		depth_msg->data.resize( depth_msg->height * depth_msg->step ); // 480 rows of 2560 bytes.
 		color_msg->data.resize( color_msg->height * color_msg->step, 0 ); // 480 rows of 1920 bytes.
 		for( int j=0; j < depth_msg->height; ++j ) {
 			for( int i =0; i < depth_msg->width; ++i ) {
-				*(float*)&depth_msg->data[ j*640*4 + i*4] = std::numeric_limits<float>::quiet_NaN();
+				*(float*)&depth_msg->data[ j*depth_msg->width*4 + i*4] = std::numeric_limits<float>::quiet_NaN();
 			}
 		}
 		cloudToDepth(cloud_msg, depth_msg, color_msg);
@@ -234,10 +241,7 @@ namespace depthcloud {
 											sensor_msgs::ImagePtr color_msg) {
 												
 		// projected coordinates + z depth value + Cx,y offset of image plane to origin :
-		double u, v, zd, cx, cy;
-
-		cx = depth_msg->width / 2;
-		cy = depth_msg->height / 2;
+		double u, v; //, zd;
 
 		// we assume that all the coordinates are in meters...
 		pcl::PointCloud<pcl::PointXYZRGB>::Ptr scene_cloud( new pcl::PointCloud<pcl::PointXYZRGB> );
@@ -293,8 +297,8 @@ namespace depthcloud {
 		for( int i = 0 ; i < number_of_points ; i++ ) {
 			if( isFinite( scene_cloud->points[i] )) {
 				// calculate in 'image plane' :
-				u = (fx_ / scene_cloud->points[i].z ) * scene_cloud->points[i].x + cx;
-				v = (fy_ / scene_cloud->points[i].z ) * scene_cloud->points[i].y + cy;
+				u = (fx_ / scene_cloud->points[i].z ) * scene_cloud->points[i].x + cx_;
+				v = (fy_ / scene_cloud->points[i].z ) * scene_cloud->points[i].y + cy_;
 				// only write out pixels that fit into our depth image
 				int dlocation = int(u)*4 + int(v)*depth_msg->step;
 				if ( dlocation >=0 && dlocation < depth_msg->data.size() ) {
@@ -312,13 +316,13 @@ namespace depthcloud {
 
 	void DepthCloudEncoder::process(	const sensor_msgs::ImageConstPtr& src_depth_msg,
 										const sensor_msgs::ImageConstPtr& src_color_msg,
-										/*const std::size_t crop_size,*/
 										const float scale_)	{
 											
 		// Scale the source image messages
 		// Inefficient drop-in implementation
 		sensor_msgs::ImageConstPtr depth_msg = src_depth_msg;
 		sensor_msgs::ImageConstPtr color_msg = src_color_msg;
+		
 		{ 
 			cv_bridge::CvImagePtr color_ptr;
 			cv_bridge::CvImagePtr depth_ptr;			
@@ -393,28 +397,6 @@ namespace depthcloud {
 			std::size_t y, x, left_x = 0, top_y = 0, width_x = input_width, width_y = input_height;
 
 			int top_bottom_corner = 0, left_right_corner = 0;
-
-			/*
-			// calculate borders to crop input image to crop_size X crop_size			
-			int top_bottom_corner = (static_cast<int>(input_height) - static_cast<int>(depth_msg->height)) / 2;
-			int left_right_corner = (static_cast<int>(input_width) - static_cast<int>(depth_msg->width)) / 2;
-
-			if (top_bottom_corner < 0) {
-				top_y = 0;
-				width_y = input_height;
-			} else {
-				top_y = top_bottom_corner;
-				width_y = input_height - top_bottom_corner;
-			}
-
-			if (left_right_corner < 0) {
-				left_x = 0;
-				width_x = input_width;
-			} else {
-				left_x = left_right_corner;
-				width_x = input_width - left_right_corner;
-			}
-			*/
 			
 			// pointer to output image
 			uint8_t* dest_ptr = &output_msg->data[((top_y - top_bottom_corner) * output_msg->width + left_x - left_right_corner) * pix_size];
